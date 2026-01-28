@@ -8,6 +8,7 @@
     "server": "node server.js",
     "start": "concurrently \"npm run server\" \"npm run dev\"",
     "build": "vite build",
+    "build:obf": "vite build && node tool/obfuscate.js",
     "preview": "vite preview"
   },
   "dependencies": {
@@ -24,6 +25,8 @@
     "@vitejs/plugin-react": "^5.0.0",
     "typescript": "~5.8.2",
     "vite": "^6.2.0",
-    "concurrently": "^8.2.2"
+    "concurrently": "^8.2.2",
+    "javascript-obfuscator": "^4.1.0",
+    "terser": "^5.27.0"
   }
 }
