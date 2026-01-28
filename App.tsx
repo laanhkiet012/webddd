@@ -4,7 +4,7 @@ import { golikeService, checkCookieFormat } from './services/golikeService';
 import LogTerminal from './components/LogTerminal';
 import AccountCard from './components/AccountCard';
 import StatsBoard from './components/StatsBoard';
-import { Play, Square, RefreshCw, Key, CreditCard, Wifi, WifiOff } from 'lucide-react';
+import { Play, Square, RefreshCw, Key, CreditCard, Wifi, WifiOff, Check, CheckCheck } from 'lucide-react';
 
 const App: React.FC = () => {
     const [auth, setAuth] = useState<string>(() => localStorage.getItem('gl_auth') || '');
@@ -14,6 +14,9 @@ const App: React.FC = () => {
     const [isRunning, setIsRunning] = useState<boolean>(false);
     const [isConnected, setIsConnected] = useState<boolean>(false);
     const [activeTab, setActiveTab] = useState<Platform | 'all'>('all');
+
+    // Account selection state
+    const [selectedAccounts, setSelectedAccounts] = useState<Set<string>>(new Set());
 
     const [stats, setStats] = useState<WorkerStats>({
         totalJobs: 0,
@@ -75,6 +78,8 @@ const App: React.FC = () => {
                 };
             });
             setAccounts(loadedAccounts);
+            // Auto-select all accounts on load
+            setSelectedAccounts(new Set(loadedAccounts.map(a => a.id)));
         });
 
         golikeService.on('log', (data) => {
@@ -121,21 +126,62 @@ const App: React.FC = () => {
         setAccounts(prev => prev.map(acc => acc.id === id ? { ...acc, cookie: value } : acc));
     };
 
+    // Toggle account selection
+    const toggleAccount = (id: string) => {
+        setSelectedAccounts(prev => {
+            const newSet = new Set(prev);
+            if (newSet.has(id)) {
+                newSet.delete(id);
+            } else {
+                newSet.add(id);
+            }
+            return newSet;
+        });
+    };
+
+    // Select/Deselect all in current tab
+    const selectAllInTab = () => {
+        const tabAccounts = activeTab === 'all' ? accounts : accounts.filter(a => a.platform === activeTab);
+        const allSelected = tabAccounts.every(a => selectedAccounts.has(a.id));
+
+        setSelectedAccounts(prev => {
+            const newSet = new Set(prev);
+            tabAccounts.forEach(a => {
+                if (allSelected) {
+                    newSet.delete(a.id);
+                } else {
+                    newSet.add(a.id);
+                }
+            });
+            return newSet;
+        });
+    };
+
+    // Select only current platform
+    const selectOnlyPlatform = (platform: Platform) => {
+        const platformAccounts = accounts.filter(a => a.platform === platform);
+        setSelectedAccounts(new Set(platformAccounts.map(a => a.id)));
+        addLog("System", `Đã chọn ${platformAccounts.length} tài khoản ${platform.toUpperCase()}`, "info");
+    };
+
     const startAutomation = () => {
         if (!isConnected) {
             addLog("System", "Server chưa kết nối!", "fail");
             return;
         }
 
-        const validAccounts = accounts.filter(a => a.status !== 'die' && a.status !== 'maintenance');
+        // Only run selected accounts
+        const selectedList = accounts.filter(a => selectedAccounts.has(a.id));
+        const validAccounts = selectedList.filter(a => a.status !== 'die' && a.status !== 'maintenance');
         const readyAccounts = validAccounts.filter(a => checkCookieFormat(a.cookie, a.platform));
 
         if (readyAccounts.length === 0) {
-            addLog("System", "Chưa nhập Cookie cho tài khoản nào.", "fail");
-            alert("Vui lòng nhập Cookie (sessionid cho IG, _auth cho Pin) để chạy.");
+            addLog("System", "Chưa chọn tài khoản nào có Cookie hợp lệ.", "fail");
+            alert("Vui lòng chọn tài khoản và nhập Cookie để chạy.");
             return;
         }
 
+        addLog("System", `Đang chạy ${readyAccounts.length} tài khoản đã chọn...`, "success");
         setIsRunning(true);
         golikeService.startAutomation(readyAccounts, auth);
     };
@@ -149,6 +195,8 @@ const App: React.FC = () => {
     const displayedAccounts = activeTab === 'all'
         ? accounts
         : accounts.filter(a => a.platform === activeTab);
+
+    const selectedCountInTab = displayedAccounts.filter(a => selectedAccounts.has(a.id)).length;
 
     return (
         <div className="flex h-screen bg-gray-950 text-gray-100 font-sans">
@@ -230,21 +278,71 @@ const App: React.FC = () => {
                 <div className="flex-1 overflow-y-auto p-4 md:p-6 bg-gray-950">
                     <StatsBoard stats={stats} />
 
-                    <div className="flex items-center gap-4 mb-4 border-b border-gray-800 pb-2 overflow-x-auto">
-                        <button onClick={() => setActiveTab('all')} className={`text-sm px-3 py-1 rounded whitespace-nowrap ${activeTab === 'all' ? 'bg-gray-800' : 'text-gray-500'}`}>Tất cả ({accounts.length})</button>
-                        <button onClick={() => setActiveTab('instagram')} className={`text-sm px-3 py-1 rounded whitespace-nowrap ${activeTab === 'instagram' ? 'text-pink-400 bg-pink-900/20' : 'text-gray-500'}`}>📸 Instagram</button>
-                        <button onClick={() => setActiveTab('pinterest')} className={`text-sm px-3 py-1 rounded whitespace-nowrap ${activeTab === 'pinterest' ? 'text-red-400 bg-red-900/20' : 'text-gray-500'}`}>📌 Pinterest</button>
-                        <button onClick={() => setActiveTab('twitter')} className={`text-sm px-3 py-1 rounded whitespace-nowrap ${activeTab === 'twitter' ? 'text-blue-400 bg-blue-900/20' : 'text-gray-500'}`}>🐦 Twitter/X 🎭</button>
+                    {/* Platform tabs with selection controls */}
+                    <div className="flex flex-wrap items-center gap-2 mb-4 border-b border-gray-800 pb-3">
+                        <div className="flex items-center gap-2 flex-wrap">
+                            <button
+                                onClick={() => setActiveTab('all')}
+                                className={`text-sm px-3 py-1.5 rounded-lg whitespace-nowrap transition-all ${activeTab === 'all' ? 'bg-gray-700 text-white' : 'text-gray-500 hover:bg-gray-800'}`}
+                            >
+                                Tất cả ({accounts.length})
+                            </button>
+                            <button
+                                onClick={() => setActiveTab('instagram')}
+                                onDoubleClick={() => selectOnlyPlatform('instagram')}
+                                className={`text-sm px-3 py-1.5 rounded-lg whitespace-nowrap transition-all ${activeTab === 'instagram' ? 'text-pink-400 bg-pink-900/30 ring-1 ring-pink-500' : 'text-gray-500 hover:bg-gray-800'}`}
+                            >
+                                📸 IG ({accounts.filter(a => a.platform === 'instagram').length})
+                            </button>
+                            <button
+                                onClick={() => setActiveTab('pinterest')}
+                                onDoubleClick={() => selectOnlyPlatform('pinterest')}
+                                className={`text-sm px-3 py-1.5 rounded-lg whitespace-nowrap transition-all ${activeTab === 'pinterest' ? 'text-red-400 bg-red-900/30 ring-1 ring-red-500' : 'text-gray-500 hover:bg-gray-800'}`}
+                            >
+                                📌 Pin ({accounts.filter(a => a.platform === 'pinterest').length})
+                            </button>
+                            <button
+                                onClick={() => setActiveTab('twitter')}
+                                onDoubleClick={() => selectOnlyPlatform('twitter')}
+                                className={`text-sm px-3 py-1.5 rounded-lg whitespace-nowrap transition-all ${activeTab === 'twitter' ? 'text-blue-400 bg-blue-900/30 ring-1 ring-blue-500' : 'text-gray-500 hover:bg-gray-800'}`}
+                            >
+                                🐦 X ({accounts.filter(a => a.platform === 'twitter').length})
+                            </button>
+                        </div>
+
+                        {/* Selection controls */}
+                        <div className="flex items-center gap-2 ml-auto">
+                            <span className="text-xs text-gray-500">
+                                Đã chọn: <span className="text-cyan-400 font-bold">{selectedAccounts.size}/{accounts.length}</span>
+                            </span>
+                            <button
+                                onClick={selectAllInTab}
+                                className="text-xs px-2 py-1 rounded bg-gray-800 hover:bg-gray-700 text-gray-300 flex items-center gap-1"
+                            >
+                                <CheckCheck size={12} />
+                                {displayedAccounts.every(a => selectedAccounts.has(a.id)) ? 'Bỏ chọn' : 'Chọn tất cả'}
+                            </button>
+                        </div>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 mb-6">
+                    {/* Account grid with checkboxes */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 mb-6">
                         {displayedAccounts.map(acc => (
-                            <AccountCard
+                            <div
                                 key={acc.id}
-                                account={acc}
-                                onCookieChange={handleCookieChange}
-                                isRunning={isRunning}
-                            />
+                                className={`relative cursor-pointer transition-all ${selectedAccounts.has(acc.id) ? 'ring-2 ring-cyan-500 rounded-lg' : 'opacity-60'}`}
+                                onClick={() => !isRunning && toggleAccount(acc.id)}
+                            >
+                                {/* Checkbox indicator */}
+                                <div className={`absolute top-2 left-2 z-10 w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold transition-all ${selectedAccounts.has(acc.id) ? 'bg-cyan-500 text-white' : 'bg-gray-700 text-gray-400'}`}>
+                                    {selectedAccounts.has(acc.id) ? <Check size={12} /> : ''}
+                                </div>
+                                <AccountCard
+                                    account={acc}
+                                    onCookieChange={handleCookieChange}
+                                    isRunning={isRunning}
+                                />
+                            </div>
                         ))}
                     </div>
 
