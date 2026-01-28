@@ -1,4 +1,4 @@
-export type Platform = 'instagram' | 'pinterest';
+export type Platform = 'instagram' | 'pinterest' | 'twitter';
 
 export interface GolikeAccount {
   id: string;
@@ -32,9 +32,9 @@ export interface WorkerStats {
 }
 
 export interface Job {
-    id: string;
-    link: string;
-    type: string;
-    object_id: string;
-    price: number;
+  id: string;
+  link: string;
+  type: string;
+  object_id: string;
+  price: number;
 }

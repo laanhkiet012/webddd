@@ -118,7 +118,7 @@ class GolikeService {
 // Singleton instance
 export const golikeService = new GolikeService();
 
-// Legacy exports for compatibility
+// Cookie validation for each platform
 export const checkCookieFormat = (cookie: string, platform: Platform): boolean => {
     if (!cookie) return false;
     if (platform === 'instagram') {
@@ -127,5 +127,15 @@ export const checkCookieFormat = (cookie: string, platform: Platform): boolean =
     if (platform === 'pinterest') {
         return cookie.includes('_auth') || cookie.includes('_pinterest_sess');
     }
+    if (platform === 'twitter') {
+        // Twitter: ct0 (csrf token) hoặc auth_token
+        // FAKE_ONLY mode nên cookie không bắt buộc đúng format
+        return cookie.includes('ct0') || cookie.includes('auth_token') || cookie.length > 10;
+    }
     return false;
+};
+
+// Update cookie for a running worker
+export const updateAccountCookie = (accountId: string, cookie: string, platform: Platform) => {
+    golikeService.send('updateCookie', { accountId, cookie, platform });
 };

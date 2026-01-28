@@ -120,14 +120,35 @@ class GolikeAPI {
     }
 
     async skipJob(platform, accountId, adsId, objectId, jobType) {
-        const endpoint = platform === 'instagram'
-            ? "/advertising/publishers/instagram/skip-jobs"
-            : "/advertising/publishers/pinterest/skip-jobs";
+        let endpoint;
+        if (platform === 'instagram') {
+            endpoint = "/advertising/publishers/instagram/skip-jobs";
+        } else if (platform === 'pinterest') {
+            endpoint = "/advertising/publishers/pinterest/skip-jobs";
+        } else {
+            endpoint = "/advertising/publishers/twitter/skip-jobs";
+        }
         return this.request("POST", endpoint, {
             ads_id: adsId,
             object_id: objectId,
             account_id: accountId,
             type: jobType
+        });
+    }
+
+    // Twitter/X API methods
+    async getTwitterAccounts() {
+        return this.request("GET", "/twitter-account");
+    }
+
+    async getTwitterJob(accountId) {
+        return this.request("GET", `/advertising/publishers/twitter/jobs?account_id=${accountId}`);
+    }
+
+    async completeTwitterJob(accountId, adsId) {
+        return this.request("POST", "/advertising/publishers/twitter/complete-jobs", {
+            account_id: accountId,
+            ads_id: adsId
         });
     }
 }
@@ -333,13 +354,80 @@ class PinterestAPI {
     }
 }
 
+// ==================== TWITTER/X API (FAKE MODE) ====================
+// Golike không quét Twitter nên mọi job đều FAKE
+class TwitterAPI {
+    constructor(cookiesStr) {
+        this.cookies = parseCookies(cookiesStr);
+        this.csrftoken = this.cookies.ct0 || '';
+        this.authToken = this.cookies.auth_token || '';
+        this.cookieHeader = cookiesStr;
+        this.userAgent = getRandomUA();
+
+        // FAKE MODE - Golike không verify Twitter actions
+        this.fakeOnly = true;
+        this.fakeSuccessRate = 0.95; // 95% success
+    }
+
+    // Always return success in fake mode
+    async follow(userId) {
+        if (this.fakeOnly) {
+            await sleep(Math.random() * 3000 + 2000); // 2-5s delay
+            if (Math.random() < this.fakeSuccessRate) {
+                return { success: true, message: `🎭 FAKE Follow @${userId}` };
+            }
+            return { success: false, message: 'Fake skip (random)' };
+        }
+        // Real API would go here
+        return { success: true, message: `Follow ${userId}` };
+    }
+
+    async like(tweetId) {
+        if (this.fakeOnly) {
+            await sleep(Math.random() * 3000 + 2000);
+            if (Math.random() < this.fakeSuccessRate) {
+                return { success: true, message: `🎭 FAKE Like tweet ${tweetId}` };
+            }
+            return { success: false, message: 'Fake skip (random)' };
+        }
+        return { success: true, message: `Like ${tweetId}` };
+    }
+
+    async retweet(tweetId) {
+        if (this.fakeOnly) {
+            await sleep(Math.random() * 3000 + 2000);
+            if (Math.random() < this.fakeSuccessRate) {
+                return { success: true, message: `🎭 FAKE Retweet ${tweetId}` };
+            }
+            return { success: false, message: 'Fake skip (random)' };
+        }
+        return { success: true, message: `Retweet ${tweetId}` };
+    }
+
+    async comment(tweetId, text) {
+        if (this.fakeOnly) {
+            await sleep(Math.random() * 3000 + 2000);
+            if (Math.random() < this.fakeSuccessRate) {
+                return { success: true, message: `🎭 FAKE Comment on ${tweetId}` };
+            }
+            return { success: false, message: 'Fake skip (random)' };
+        }
+        return { success: true, message: `Comment ${tweetId}` };
+    }
+
+    checkSession() {
+        // For fake mode, always return true
+        return Promise.resolve(true);
+    }
+}
+
 // ==================== WORKER ====================
 class Worker {
     constructor(golike, account, cookie, platform, broadcast) {
         this.golike = golike;
         this.account = account;
         this.accountId = String(account.account_id || account.id);
-        this.username = account.instagram_username || account.username || account.pinterest_username || this.accountId;
+        this.username = account.instagram_username || account.username || account.pinterest_username || account.twitter_username || this.accountId;
         this.cookie = cookie;
         this.platform = platform;
         this.broadcast = broadcast;
@@ -350,8 +438,10 @@ class Worker {
         // Create platform API
         if (platform === 'instagram') {
             this.api = new InstagramAPI(cookie);
-        } else {
+        } else if (platform === 'pinterest') {
             this.api = new PinterestAPI(cookie);
+        } else if (platform === 'twitter') {
+            this.api = new TwitterAPI(cookie);
         }
     }
 
@@ -392,10 +482,15 @@ class Worker {
     }
 
     async processJob() {
-        // Get job from Golike
-        const jobData = this.platform === 'instagram'
-            ? await this.golike.getInstagramJob(this.accountId)
-            : await this.golike.getPinterestJob(this.accountId);
+        // Get job from Golike based on platform
+        let jobData;
+        if (this.platform === 'instagram') {
+            jobData = await this.golike.getInstagramJob(this.accountId);
+        } else if (this.platform === 'pinterest') {
+            jobData = await this.golike.getPinterestJob(this.accountId);
+        } else if (this.platform === 'twitter') {
+            jobData = await this.golike.getTwitterJob(this.accountId);
+        }
 
         if (!jobData || jobData.status !== 200) {
             const msg = jobData?.message || 'No job';
@@ -432,11 +527,13 @@ class Worker {
 
         this.broadcast({ type: 'accountStatus', accountId: this.accountId, status: 'working', message: `Đang làm: ${jobType.toUpperCase()}` });
 
-        // Process based on type
+        // Process based on platform
         if (this.platform === 'instagram') {
             await this.processInstagramJob(jobType, adsId, link, objectId, instagramUsersAdvertisingId);
-        } else {
+        } else if (this.platform === 'pinterest') {
             await this.processPinterestJob(jobType, adsId, link, objectId);
+        } else if (this.platform === 'twitter') {
+            await this.processTwitterJob(jobType, adsId, link, objectId);
         }
     }
 
@@ -545,6 +642,46 @@ class Worker {
         this.broadcast({ type: 'accountStatus', accountId: this.accountId, status: 'active', message: 'Đã gửi duyệt' });
     }
 
+    // ==================== TWITTER JOB (FAKE MODE) ====================
+    async processTwitterJob(jobType, adsId, link, objectId) {
+        this.log(`🎭 Twitter Job: ${jobType.toUpperCase()} - ${link.substring(0, 40)}...`, 'info');
+
+        let result;
+        if (jobType === 'follow') {
+            result = await this.api.follow(objectId);
+        } else if (jobType === 'like') {
+            result = await this.api.like(objectId);
+        } else if (jobType === 'retweet' || jobType === 'repost') {
+            result = await this.api.retweet(objectId);
+        } else if (jobType === 'comment' || jobType === 'reply') {
+            result = await this.api.comment(objectId, 'Nice!');
+        } else {
+            // Unknown type - just fake it
+            result = { success: true, message: `🎭 FAKE ${jobType}` };
+            await this.sleep(2000);
+        }
+
+        if (result.success) {
+            this.log(result.message, 'success');
+
+            // Report to Golike
+            const completeResult = await this.golike.completeTwitterJob(this.accountId, adsId);
+            if (completeResult?.status === 200) {
+                const prices = completeResult.data?.prices || 0;
+                this.log(`🎭 FAKE DONE → +${prices}đ (Golike không quét X)`, 'money');
+                this.broadcast({ type: 'stats', jobsDone: 1, money: prices, pending: 0 });
+                this.consecutiveFails = 0;
+            } else {
+                this.log('Báo cáo thất bại', 'warn');
+            }
+        } else {
+            this.log(`Skip: ${result.message}`, 'info');
+            await this.golike.skipJob('twitter', this.accountId, adsId, objectId, jobType);
+        }
+
+        this.broadcast({ type: 'accountStatus', accountId: this.accountId, status: 'active', message: 'OK - FAKE Mode' });
+    }
+
     stop() {
         this.running = false;
         this.log('Đã dừng worker', 'warn');
@@ -597,9 +734,10 @@ async function handleMessage(ws, data) {
             broadcast({ type: 'log', accountName: 'System', message: `Xin chào ${profile.data.username}. Số dư: ${profile.data.coin}`, logType: 'success' });
         }
 
-        // Get accounts
+        // Get accounts from all platforms
         const igAccounts = await golike.getInstagramAccounts();
         const pinAccounts = await golike.getPinterestAccounts();
+        const twitterAccounts = await golike.getTwitterAccounts();
 
         const accounts = [];
         if (igAccounts?.data) {
@@ -622,12 +760,42 @@ async function handleMessage(ws, data) {
                 });
             });
         }
+        if (twitterAccounts?.data) {
+            twitterAccounts.data.forEach(acc => {
+                accounts.push({
+                    id: String(acc.account_id || acc.id),
+                    username: acc.twitter_username || acc.username || 'Unknown',
+                    platform: 'twitter',
+                    status: 'active',
+                    fakeMode: true  // Twitter luôn chạy fake mode
+                });
+            });
+        }
 
         ws.send(JSON.stringify({ type: 'accounts', data: accounts }));
-        broadcast({ type: 'log', accountName: 'System', message: `Đã tải ${accounts.length} tài khoản`, logType: 'info' });
+        broadcast({ type: 'log', accountName: 'System', message: `Đã tải ${accounts.length} tài khoản (IG: ${igAccounts?.data?.length || 0}, Pin: ${pinAccounts?.data?.length || 0}, X: ${twitterAccounts?.data?.length || 0})`, logType: 'info' });
 
         // Store golike instance
         ws.golike = golike;
+    }
+
+    // Handle cookie update
+    if (action === 'updateCookie') {
+        const { accountId, cookie, platform } = payload;
+        const worker = workers.get(accountId);
+        if (worker) {
+            // Update cookie và restart
+            worker.cookie = cookie;
+            if (platform === 'instagram') {
+                worker.api = new InstagramAPI(cookie);
+            } else if (platform === 'pinterest') {
+                worker.api = new PinterestAPI(cookie);
+            } else if (platform === 'twitter') {
+                worker.api = new TwitterAPI(cookie);
+            }
+            broadcast({ type: 'log', accountName: worker.username, message: '🔄 Đã update cookie', logType: 'success' });
+            broadcast({ type: 'accountStatus', accountId, status: 'active', message: 'Cookie đã cập nhật' });
+        }
     }
 
     if (action === 'start') {

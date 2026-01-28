@@ -232,8 +232,9 @@ const App: React.FC = () => {
 
                     <div className="flex items-center gap-4 mb-4 border-b border-gray-800 pb-2 overflow-x-auto">
                         <button onClick={() => setActiveTab('all')} className={`text-sm px-3 py-1 rounded whitespace-nowrap ${activeTab === 'all' ? 'bg-gray-800' : 'text-gray-500'}`}>Tất cả ({accounts.length})</button>
-                        <button onClick={() => setActiveTab('instagram')} className={`text-sm px-3 py-1 rounded whitespace-nowrap ${activeTab === 'instagram' ? 'text-pink-400 bg-pink-900/20' : 'text-gray-500'}`}>Instagram</button>
-                        <button onClick={() => setActiveTab('pinterest')} className={`text-sm px-3 py-1 rounded whitespace-nowrap ${activeTab === 'pinterest' ? 'text-red-400 bg-red-900/20' : 'text-gray-500'}`}>Pinterest</button>
+                        <button onClick={() => setActiveTab('instagram')} className={`text-sm px-3 py-1 rounded whitespace-nowrap ${activeTab === 'instagram' ? 'text-pink-400 bg-pink-900/20' : 'text-gray-500'}`}>📸 Instagram</button>
+                        <button onClick={() => setActiveTab('pinterest')} className={`text-sm px-3 py-1 rounded whitespace-nowrap ${activeTab === 'pinterest' ? 'text-red-400 bg-red-900/20' : 'text-gray-500'}`}>📌 Pinterest</button>
+                        <button onClick={() => setActiveTab('twitter')} className={`text-sm px-3 py-1 rounded whitespace-nowrap ${activeTab === 'twitter' ? 'text-blue-400 bg-blue-900/20' : 'text-gray-500'}`}>🐦 Twitter/X 🎭</button>
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 mb-6">
