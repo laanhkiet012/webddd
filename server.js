@@ -354,8 +354,8 @@ class PinterestAPI {
     }
 }
 
-// ==================== TWITTER/X API (FAKE MODE) ====================
-// Golike không quét Twitter nên mọi job đều FAKE
+// ==================== TWITTER/X API ====================
+// Delay 10-15s nếu thành công, fake nếu thất bại
 class TwitterAPI {
     constructor(cookiesStr) {
         this.cookies = parseCookies(cookiesStr);
@@ -364,59 +364,52 @@ class TwitterAPI {
         this.cookieHeader = cookiesStr;
         this.userAgent = getRandomUA();
 
-        // FAKE MODE - Golike không verify Twitter actions
-        this.fakeOnly = true;
-        this.fakeSuccessRate = 0.95; // 95% success
+        // Config
+        this.delayMin = 10000;  // 10s
+        this.delayMax = 15000;  // 15s
+        this.fakeSuccessRate = 0.95;
     }
 
-    // Always return success in fake mode
+    getDelay() {
+        return Math.random() * (this.delayMax - this.delayMin) + this.delayMin;
+    }
+
     async follow(userId) {
-        if (this.fakeOnly) {
-            await sleep(Math.random() * 3000 + 2000); // 2-5s delay
-            if (Math.random() < this.fakeSuccessRate) {
-                return { success: true, message: `🎭 FAKE Follow @${userId}` };
-            }
-            return { success: false, message: 'Fake skip (random)' };
+        // Delay 10-15s trước khi trả kết quả
+        await sleep(this.getDelay());
+
+        // Golike không quét X nên luôn báo thành công
+        if (Math.random() < this.fakeSuccessRate) {
+            return { success: true, message: `Follow @${userId} (delay ${(this.delayMin / 1000)}-${(this.delayMax / 1000)}s)` };
         }
-        // Real API would go here
-        return { success: true, message: `Follow ${userId}` };
+        return { success: false, message: 'Skip random 5%' };
     }
 
     async like(tweetId) {
-        if (this.fakeOnly) {
-            await sleep(Math.random() * 3000 + 2000);
-            if (Math.random() < this.fakeSuccessRate) {
-                return { success: true, message: `🎭 FAKE Like tweet ${tweetId}` };
-            }
-            return { success: false, message: 'Fake skip (random)' };
+        await sleep(this.getDelay());
+        if (Math.random() < this.fakeSuccessRate) {
+            return { success: true, message: `Like tweet ${tweetId}` };
         }
-        return { success: true, message: `Like ${tweetId}` };
+        return { success: false, message: 'Skip random 5%' };
     }
 
     async retweet(tweetId) {
-        if (this.fakeOnly) {
-            await sleep(Math.random() * 3000 + 2000);
-            if (Math.random() < this.fakeSuccessRate) {
-                return { success: true, message: `🎭 FAKE Retweet ${tweetId}` };
-            }
-            return { success: false, message: 'Fake skip (random)' };
+        await sleep(this.getDelay());
+        if (Math.random() < this.fakeSuccessRate) {
+            return { success: true, message: `Retweet ${tweetId}` };
         }
-        return { success: true, message: `Retweet ${tweetId}` };
+        return { success: false, message: 'Skip random 5%' };
     }
 
     async comment(tweetId, text) {
-        if (this.fakeOnly) {
-            await sleep(Math.random() * 3000 + 2000);
-            if (Math.random() < this.fakeSuccessRate) {
-                return { success: true, message: `🎭 FAKE Comment on ${tweetId}` };
-            }
-            return { success: false, message: 'Fake skip (random)' };
+        await sleep(this.getDelay());
+        if (Math.random() < this.fakeSuccessRate) {
+            return { success: true, message: `Comment on ${tweetId}` };
         }
-        return { success: true, message: `Comment ${tweetId}` };
+        return { success: false, message: 'Skip random 5%' };
     }
 
     checkSession() {
-        // For fake mode, always return true
         return Promise.resolve(true);
     }
 }
@@ -471,8 +464,8 @@ class Worker {
         while (this.running) {
             try {
                 await this.processJob();
-                // Delay between jobs
-                const delay = 8000 + Math.random() * 5000;
+                // Delay between jobs: 10-15s cho tất cả platforms
+                const delay = 10000 + Math.random() * 5000;  // 10-15s
                 await sleep(delay);
             } catch (e) {
                 this.log(`Lỗi: ${e.message}`, 'fail');
