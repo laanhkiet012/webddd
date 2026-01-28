@@ -460,7 +460,9 @@ class Worker {
                     this.log('Lỗi báo Golike', 'warn');
                 }
             } else {
-                this.log(`Follow thất bại: ${result.message}`, 'fail');
+                this.log(`Follow thất bại: ${result.message} - Skip job`, 'fail');
+                // Skip job ngay để lấy job mới
+                await this.golike.skipJob('instagram', this.accountId, adsId, objectId, 'follow');
                 this.consecutiveFails++;
             }
         } else if (jobType === 'like') {
@@ -492,7 +494,9 @@ class Worker {
                     this.consecutiveFails = 0;
                 }
             } else {
-                this.log(`Like thất bại: ${result.message}`, 'fail');
+                this.log(`Like thất bại: ${result.message} - Skip job`, 'fail');
+                // Skip job ngay để lấy job mới
+                await this.golike.skipJob('instagram', this.accountId, adsId, objectId, 'like');
                 this.consecutiveFails++;
             }
         }
